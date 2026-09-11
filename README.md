@@ -1,4 +1,4 @@
-# AWS Hands-On Labs & Cloud Projects
+# AWS Hands-On Labs
 
 This repository documents my hands-on learning and practical projects completed as part of the **AWS re/Start Cloud Computing Program**.
 
