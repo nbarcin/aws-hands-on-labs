@@ -1223,44 +1223,6 @@ For a production environment, I would:
 * Review AWS Config compliance regularly
 * Avoid exposing AWS account information in public screenshots
 * Never publish access keys or secrets
-
-Before publishing screenshots to GitHub, I would hide:
-
-```text
-AWS Account ID
-Email Address
-Private IP Addresses
-Public IP Addresses when unnecessary
-Instance IDs when sensitive
-Credentials
-Access Keys
-Secrets
-```
-
----
-
-# Cost Considerations
-
-AWS services can generate charges depending on usage.
-
-Before starting the lab, I would review AWS pricing.
-
-After completing the lab, I would clean up resources that are no longer needed.
-
-Possible cleanup items include:
-
-```text
-CloudWatch Alarms
-CloudWatch Log Groups
-SNS Topics
-EventBridge Rules
-Systems Manager Parameters
-AWS Config Rules
-EC2 resources if no longer needed
-```
-
-I would keep any resources that are required by other AWS labs.
-
 ---
 
 # Skills Demonstrated
