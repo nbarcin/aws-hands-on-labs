@@ -775,3 +775,295 @@ Website file changes
 
 The environment was subsequently hardened by removing unauthorized access, restricting SSH, disabling password authentication, removing the compromised IAM/OS users, and restoring the affected website content.
 
+
+
+
+-- ============================================================
+-- AWS CloudTrail Security Investigation
+-- Amazon Athena Queries
+-- ============================================================
+
+
+-- ============================================================
+-- 1. Inspect CloudTrail Records
+-- ============================================================
+
+SELECT *
+FROM cloudtrail_logs_monitoring####
+LIMIT 5;
+
+
+-- ============================================================
+-- 2. View Important CloudTrail Fields
+-- ============================================================
+
+SELECT
+    useridentity.username AS username,
+    eventtime,
+    eventsource,
+    eventname,
+    sourceipaddress,
+    requestparameters
+FROM cloudtrail_logs_monitoring####
+LIMIT 30;
+
+
+-- ============================================================
+-- 3. View All EC2 Activity
+-- ============================================================
+
+SELECT
+    useridentity.username AS username,
+    eventtime,
+    eventsource,
+    eventname,
+    sourceipaddress,
+    requestparameters
+FROM cloudtrail_logs_monitoring####
+WHERE eventsource = 'ec2.amazonaws.com'
+ORDER BY eventtime;
+
+
+-- ============================================================
+-- 4. Search for Security Group Activity
+-- ============================================================
+
+SELECT
+    useridentity.username AS username,
+    eventtime,
+    eventname,
+    sourceipaddress,
+    requestparameters
+FROM cloudtrail_logs_monitoring####
+WHERE eventsource = 'ec2.amazonaws.com'
+  AND eventname LIKE '%SecurityGroup%'
+ORDER BY eventtime;
+
+
+-- ============================================================
+-- 5. Search for Security-Related Events
+-- ============================================================
+
+SELECT
+    useridentity.username AS username,
+    eventtime,
+    eventsource,
+    eventname,
+    sourceipaddress,
+    requestparameters
+FROM cloudtrail_logs_monitoring####
+WHERE eventname LIKE '%Security%'
+ORDER BY eventtime;
+
+
+-- ============================================================
+-- 6. Search Specifically for SSH / Port 22 Changes
+-- ============================================================
+
+SELECT
+    useridentity.username AS username,
+    eventtime,
+    eventname,
+    sourceipaddress,
+    requestparameters
+FROM cloudtrail_logs_monitoring####
+WHERE eventsource = 'ec2.amazonaws.com'
+  AND (
+        eventname LIKE '%SecurityGroup%'
+        OR eventname LIKE '%Authorize%'
+        OR eventname LIKE '%Revoke%'
+      )
+ORDER BY eventtime;
+
+
+-- ============================================================
+-- 7. Identify Security Group Inbound Rule Changes
+-- ============================================================
+
+SELECT
+    useridentity.username AS username,
+    eventtime,
+    eventname,
+    sourceipaddress,
+    requestparameters
+FROM cloudtrail_logs_monitoring####
+WHERE eventsource = 'ec2.amazonaws.com'
+  AND eventname IN (
+        'AuthorizeSecurityGroupIngress',
+        'RevokeSecurityGroupIngress',
+        'AuthorizeSecurityGroupEgress',
+        'RevokeSecurityGroupEgress'
+      )
+ORDER BY eventtime;
+
+
+-- ============================================================
+-- 8. Search for the Dangerous 0.0.0.0/0 Rule
+-- ============================================================
+--
+-- This query searches request parameters for the open
+-- internet CIDR block.
+--
+
+SELECT
+    useridentity.username AS username,
+    eventtime,
+    eventname,
+    sourceipaddress,
+    requestparameters
+FROM cloudtrail_logs_monitoring####
+WHERE eventsource = 'ec2.amazonaws.com'
+  AND requestparameters LIKE '%0.0.0.0/0%'
+ORDER BY eventtime;
+
+
+-- ============================================================
+-- 9. Search for Port 22 Activity
+-- ============================================================
+
+SELECT
+    useridentity.username AS username,
+    eventtime,
+    eventname,
+    sourceipaddress,
+    requestparameters
+FROM cloudtrail_logs_monitoring####
+WHERE eventsource = 'ec2.amazonaws.com'
+  AND requestparameters LIKE '%22%'
+ORDER BY eventtime;
+
+
+-- ============================================================
+-- 10. Identify Unique Users and EC2 Actions
+-- ============================================================
+
+SELECT DISTINCT
+    useridentity.username AS username,
+    eventname,
+    eventsource
+FROM cloudtrail_logs_monitoring####
+WHERE eventsource = 'ec2.amazonaws.com'
+ORDER BY username, eventname;
+
+
+-- ============================================================
+-- 11. Review Recent Activity
+-- ============================================================
+
+SELECT
+    useridentity.username AS username,
+    eventtime,
+    eventsource,
+    eventname,
+    sourceipaddress
+FROM cloudtrail_logs_monitoring####
+WHERE from_iso8601_timestamp(eventtime) >
+      date_add('day', -1, now())
+ORDER BY eventtime DESC;
+
+
+-- ============================================================
+-- 12. Identify Potentially Suspicious Activity
+-- ============================================================
+
+SELECT
+    useridentity.username AS username,
+    eventtime,
+    eventsource,
+    eventname,
+    sourceipaddress,
+    requestparameters
+FROM cloudtrail_logs_monitoring####
+WHERE
+    eventname LIKE '%Authorize%'
+    OR eventname LIKE '%Create%'
+    OR eventname LIKE '%Delete%'
+    OR eventname LIKE '%Modify%'
+    OR eventname LIKE '%Update%'
+ORDER BY eventtime DESC;
+
+
+-- ============================================================
+-- 13. Security Group Investigation by Specific Group ID
+-- ============================================================
+--
+-- Replace <SECURITY_GROUP_ID> with the Security Group ID
+-- associated with the Café Web Server.
+--
+-- Example:
+-- sg-xxxxxxxxxxxxxxxxx
+--
+
+SELECT
+    useridentity.username AS username,
+    eventtime,
+    eventname,
+    sourceipaddress,
+    requestparameters
+FROM cloudtrail_logs_monitoring####
+WHERE eventsource = 'ec2.amazonaws.com'
+  AND requestparameters LIKE '%<SECURITY_GROUP_ID>%'
+ORDER BY eventtime;
+
+
+-- ============================================================
+-- 14. Final Investigation Query
+-- ============================================================
+--
+-- This query is designed to identify the event responsible
+-- for opening SSH access to the internet.
+--
+
+SELECT
+    useridentity.username AS username,
+    eventtime,
+    eventname,
+    eventsource,
+    sourceipaddress,
+    useragent,
+    requestparameters
+FROM cloudtrail_logs_monitoring####
+WHERE eventsource = 'ec2.amazonaws.com'
+  AND eventname = 'AuthorizeSecurityGroupIngress'
+ORDER BY eventtime;
+
+
+-- ============================================================
+-- 15. Determine the Access Method
+-- ============================================================
+--
+-- Examine the userAgent field.
+--
+-- Console activity often contains browser-related information.
+-- Programmatic activity can contain AWS CLI / SDK information.
+--
+
+SELECT
+    useridentity.username AS username,
+    eventtime,
+    eventname,
+    sourceipaddress,
+    useragent,
+    requestparameters
+FROM cloudtrail_logs_monitoring####
+WHERE eventsource = 'ec2.amazonaws.com'
+  AND eventname = 'AuthorizeSecurityGroupIngress'
+ORDER BY eventtime;
+
+
+-- ============================================================
+-- Investigation Questions
+-- ============================================================
+--
+-- 1. Who modified the Security Group?
+-- 2. What was the exact event time?
+-- 3. What was the source IP address?
+-- 4. What was the event name?
+-- 5. Which Security Group was modified?
+-- 6. Was port 22 opened?
+-- 7. Was the source 0.0.0.0/0?
+-- 8. Was the action performed through the AWS Console,
+--    AWS CLI, or another programmatic method?
+--
+-- ============================================================
+
